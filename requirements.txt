@@ -3,4 +3,4 @@ streamlit-autorefresh
 nselib
 pandas
 pandas_market_calendars
-
+requests
