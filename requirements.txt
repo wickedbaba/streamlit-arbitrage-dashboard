@@ -1,6 +1,7 @@
-streamlit
-streamlit-autorefresh
-nselib
-pandas
 pandas_market_calendars
-requests
+streamlit>=1.38.0 
+streamlit-autorefresh>=0.0.1 
+nselib>=0.7 
+pandas>=2.2.2 
+yfinance>=0.2.44 
+requests>=2.32.3
