@@ -1,69 +1,43 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
-from nselib import derivatives
+from nselib import capital_market, derivatives
 import pandas as pd
 from datetime import datetime
-import requests
-import time
 
 st.set_page_config(page_title="Cash-Futures Arbitrage", layout="wide")
 st_autorefresh(interval=60 * 1000, key="autorefresh")
 
-st.title("📈 NSE Cash-Futures Arbitrage Monitor")
+st.title("📈 NSE Cash-Futures Arbitrage Dashboard")
 
-# ⏳ Spot price function with cookie preload
-def get_spot_price(symbol):
-    url = f"https://www.nseindia.com/api/quote-equity?symbol={symbol.upper()}"
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
-        "Referer": f"https://www.nseindia.com/get-quotes/equity?symbol={symbol.upper()}"
-    }
-
-    session = requests.Session()
-    session.headers.update(headers)
-
-    try:
-        # Load cookies (NSE requires this)
-        session.get("https://www.nseindia.com", timeout=5)
-        time.sleep(1)  # let cookies register
-        response = session.get(url, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        return float(data["priceInfo"]["lastPrice"])
-
-    except Exception as e:
-        raise Exception(f"NSE spot API error for {symbol}: {e}")
-
-# 🏦 Stock list
+# 🏦 List of stocks
 default_stocks = ["INFY", "TCS", "RELIANCE", "HDFCBANK", "ITC", "ICICIBANK"]
 stocks = st.multiselect("Select Stocks", default_stocks, default=default_stocks)
 
-data = []
+results = []
 
-# 📊 Loop through each stock
 for symbol in stocks:
     try:
-        # Spot price
-        spot_price = get_spot_price(symbol)
+        # 📊 Spot Price from capital_market
+        spot_df = capital_market.price_volume_data(symbol=symbol, period="1D")
+        spot_price = float(spot_df["LastPrice"].iloc[-1])
 
-        # Futures price
-        fut_chain = derivatives.equity_derivatives(symbol)
-        fut_data = next((item for item in fut_chain["data"] if item["instrumentType"] == "FUTSTK"), None)
+        # 📉 Futures Price (latest expiry) from derivatives
+        future_df = derivatives.future_price_volume_data(
+            symbol=symbol, instrument="FUTSTK", period="1D"
+        )
 
-        if not fut_data:
-            st.warning(f"❌ No futures data found for {symbol}")
-            continue
-
-        fut_price = float(fut_data["lastPrice"])
-        expiry_date = pd.to_datetime(fut_data["expiryDate"], format="%d-%b-%Y")
+        # Use the first row as nearest expiry
+        fut_price = float(future_df["Close"].iloc[0])
+        expiry_str = future_df["Expiry"].iloc[0]  # Format: '27-Jun-2025'
+        expiry_date = pd.to_datetime(expiry_str, format="%d-%b-%Y")
         today = pd.to_datetime(datetime.now().date())
         days_left = max((expiry_date - today).days, 1)
 
+        # 🧮 Arbitrage Calculations
         premium = fut_price - spot_price
         annual_coc = (premium / spot_price) * (365 / days_left) * 100
 
-        data.append({
+        results.append({
             "Symbol": symbol,
             "Spot Price": round(spot_price, 2),
             "Futures Price": round(fut_price, 2),
@@ -75,11 +49,12 @@ for symbol in stocks:
     except Exception as e:
         st.warning(f"❌ {symbol}: {e}")
 
-# 📈 Show DataFrame
-if data:
-    df = pd.DataFrame(data)
-    st.dataframe(df.sort_values("Annualized CoC (%)", ascending=False), use_container_width=True)
+# 📊 Display results
+if results:
+    df = pd.DataFrame(results)
+    df = df.sort_values("Annualized CoC (%)", ascending=False)
+    st.dataframe(df, use_container_width=True)
 else:
-    st.error("⚠️ No data could be fetched. Please try again or check symbols.")
+    st.error("⚠️ No data fetched.")
 
-st.caption("⏱ Auto-refreshes every 60s • Spot via NSE • Futures via nselib • Built by Manav")
+st.caption("Auto-refreshes every 60 seconds • Spot & Futures via nselib • Built by Manav")
