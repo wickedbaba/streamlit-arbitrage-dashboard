@@ -5,3 +5,4 @@ nselib>=0.7
 pandas>=2.2.2 
 yfinance>=0.2.44 
 requests>=2.32.3
+nsepython
