@@ -1,7 +1,6 @@
 import streamlit as st
 from nselib import capital_market, derivatives
 from datetime import datetime, time
-import nsepython
 import concurrent.futures
 import traceback
 import pandas as pd
